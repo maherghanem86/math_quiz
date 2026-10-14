@@ -91,10 +91,10 @@ class MathRichText extends StatelessWidget {
                 : EdgeInsets.zero,
             decoration: highlightMath
                 ? BoxDecoration(
-                    color: Colors.blue.withOpacity(0.08),
+                    color: Colors.blue.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: Colors.blue.withOpacity(0.2),
+                      color: Colors.blue.withValues(alpha: 0.2),
                       width: 1,
                     ),
                   )
