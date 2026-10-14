@@ -21,217 +21,360 @@ class Question {
   });
 }
 
-// قاعدة بيانات الأسئلة (30 سؤال) - تم تحويل الرموز لتعمل بدون مكتبات خارجية
+// أداة ذكية لفصل النصوص العربية عن المعادلات الرياضية لضمان عرض الجذور والكسور والأسس بشكل صحيح (LTR) داخل سياق عربي (RTL)
+class MixedDirectionText extends StatelessWidget {
+  final String text;
+  final TextStyle style;
+  final TextAlign textAlign;
+
+  const MixedDirectionText(
+    this.text, {
+    super.key,
+    required this.style,
+    this.textAlign = TextAlign.start,
+  });
+
+  // تعبير نمطي يلتقط أي معادلة رياضية أو أرقام أو جذور أو رموز لاتينية متجاورة
+  static final RegExp _mathRegex = RegExp(
+    r'[a-zA-Z0-9π√²³⁴⁵⁶⁷⁸⁹⁰⁻⁺·÷×+/=()-]+(?:\s*[a-zA-Z0-9π√²³⁴⁵⁶⁷⁸⁹⁰⁻⁺·÷×+/=()-]+)*',
+  );
+
+  bool _isPureMath(String s) {
+    final trimmed = s.trim();
+    if (trimmed.isEmpty) return false;
+    // إذا كانت مجرد شرطة عادية أو قوس فارغ بدون أرقام أو رموز رياضية، نتركها للسياق العربي
+    if (trimmed == '-' || trimmed == '(' || trimmed == ')') return false;
+    return true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final List<InlineSpan> spans = [];
+    int lastMatchEnd = 0;
+
+    for (final Match match in _mathRegex.allMatches(text)) {
+      // إضافة النص العربي الذي يسبق المعادلة الرياضية
+      if (match.start > lastMatchEnd) {
+        spans.add(
+          TextSpan(
+            text: text.substring(lastMatchEnd, match.start),
+            style: style,
+          ),
+        );
+      }
+
+      final String mathSegment = match.group(0)!;
+
+      // فصل المسافات البادئة واللاحقة لكي لا تلتصق الكلمات العربية بالمعادلة
+      final String leadingSpaces =
+          RegExp(r'^\s*').firstMatch(mathSegment)?.group(0) ?? '';
+      final String trailingSpaces =
+          RegExp(r'\s*$').firstMatch(mathSegment)?.group(0) ?? '';
+      final String coreMath = mathSegment.trim();
+
+      if (leadingSpaces.isNotEmpty) {
+        spans.add(TextSpan(text: leadingSpaces, style: style));
+      }
+
+      if (_isPureMath(coreMath)) {
+        spans.add(
+          WidgetSpan(
+            alignment: PlaceholderAlignment.baseline,
+            baseline: TextBaseline.alphabetic,
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: Text(
+                coreMath,
+                style: style.copyWith(
+                  fontFamily: 'Roboto', // خط واضح للأرقام والرموز الرياضية
+                ),
+              ),
+            ),
+          ),
+        );
+      } else {
+        spans.add(TextSpan(text: coreMath, style: style));
+      }
+
+      if (trailingSpaces.isNotEmpty) {
+        spans.add(TextSpan(text: trailingSpaces, style: style));
+      }
+
+      lastMatchEnd = match.end;
+    }
+
+    // إضافة ما تبقى من النص العربي بعد آخر معادلة
+    if (lastMatchEnd < text.length) {
+      spans.add(
+        TextSpan(
+          text: text.substring(lastMatchEnd),
+          style: style,
+        ),
+      );
+    }
+
+    return RichText(
+      textAlign: textAlign,
+      textDirection: TextDirection.rtl,
+      text: TextSpan(
+        style: style,
+        children: spans,
+      ),
+    );
+  }
+}
+
+// قاعدة بيانات الأسئلة (30 سؤالاً) بعد ضبط وتدقيق الخيارات الرياضية
 final List<Question> quizData = [
   Question(
     id: 1,
     questionText: "ما هي طبيعة العدد π ؟",
     options: ["عدد صحيح", "عدد عشري", "عدد غير عادي", "عدد عادي"],
     correctIndex: 2,
-    explanation: "العدد π هو عدد غير عادي لأن كتابته العشرية غير منتهية وغير دورية (قيمته التقريبية 3.14159...).",
+    explanation:
+        "العدد π هو عدد غير عادي لأن كتابته العشرية غير منتهية وغير دورية (قيمته التقريبية 3.14159...).",
   ),
   Question(
     id: 2,
-    questionText: "أي من الأعداد التالية يعتبر من الجذور الصماء (أعداد غير عادية)؟",
+    questionText:
+        "أي من الأعداد التالية يعتبر من الجذور الصماء (أعداد غير عادية)؟",
     options: ["√16", "√2", "√25", "√100"],
     correctIndex: 1,
-    explanation: "العدد √2 هو جذر أصم وعدد غير عادي، لأن ناتجه كتابة عشرية غير منتهية (1.4142...). بينما بقية الخيارات لها جذور صحيحة.",
+    explanation:
+        "العدد √2 هو جذر أصم وعدد غير عادي، لأن ناتجه كتابة عشرية غير منتهية (1.4142...). بينما بقية الخيارات لها جذور صحيحة.",
   ),
   Question(
     id: 3,
     questionText: "العدد (-5) ينتمي إلى مجموعة الأعداد:",
     options: ["الطبيعية (N)", "الصحيحة (Z)", "غير العادية", "العشرية الموجبة"],
     correctIndex: 1,
-    explanation: "الأعداد الصحيحة (Z) لا تحتوي على فاصلة عشرية وتشمل الأعداد الموجبة والسالبة. العدد الطبيعي يجب أن يكون موجباً.",
+    explanation:
+        "الأعداد الصحيحة (Z) لا تحتوي على فاصلة عشرية وتشمل الأعداد الموجبة والسالبة. العدد الطبيعي يجب أن يكون موجباً.",
   ),
   Question(
     id: 4,
     questionText: "القاسم المشترك الأكبر للعددين GCD(14, 14) يساوي:",
     options: ["1", "0", "14", "28"],
     correctIndex: 2,
-    explanation: "القاسم المشترك الأكبر للعدد نفسه هو العدد نفسه. حسب القاعدة: GCD(a, a) = a.",
+    explanation:
+        "القاسم المشترك الأكبر للعدد نفسه هو العدد نفسه. حسب القاعدة: GCD(a, a) = a.",
   ),
   Question(
     id: 5,
     questionText: "متى يقبل العدد القسمة على 3 دون باقٍ؟",
-    options: ["إذا كان آحاده صفر أو خمسة", "إذا كان آحاده زوجياً", "إذا كان مجموع أرقامه من مضاعفات الـ 3", "إذا كان عدداً فردياً"],
+    options: [
+      "إذا كان آحاده صفر أو خمسة",
+      "إذا كان آحاده زوجياً",
+      "إذا كان مجموع أرقامه من مضاعفات العدد 3",
+      "إذا كان عدداً فردياً"
+    ],
     correctIndex: 2,
-    explanation: "القاعدة تنص على أن العدد يقبل القسمة على 3 إذا كان مجموع أرقامه من مضاعفات العدد 3 (مثل 12، 15، 108).",
+    explanation:
+        "القاعدة تنص على أن العدد يقبل القسمة على 3 إذا كان مجموع أرقامه من مضاعفات العدد 3 (مثل 12، 15، 108).",
   ),
   Question(
     id: 6,
-    questionText: "باستخدام خوارزمية الطرح المتتالي أو القسمة، ما هو القاسم المشترك الأكبر للعددين (512, 224)؟",
+    questionText:
+        "باستخدام خوارزمية الطرح المتتالي أو القسمة، ما هو القاسم المشترك الأكبر للعددين (512, 224)؟",
     options: ["32", "64", "16", "8"],
     correctIndex: 0,
-    explanation: "بطريقة القسمة الإقليدية: 512 ÷ 224 = 2 والباقي 64. ثم 224 ÷ 64 = 3 والباقي 32. ثم 64 ÷ 32 = 2 والباقي 0. آخر باقي غير معدوم هو 32.",
+    explanation:
+        "بطريقة القسمة الإقليدية: 512 ÷ 224 = 2 والباقي 64. ثم 224 ÷ 64 = 3 والباقي 32. ثم 64 ÷ 32 = 2 والباقي 0. آخر باقٍ غير معدوم هو 32.",
   ),
   Question(
     id: 7,
     questionText: "للحصول على كسر مختزل، نقسم البسط والمقام على:",
-    options: ["العدد 2", "القاسم المشترك الأكبر بينهما", "القاسم المشترك الأصغر بينهما", "أي قاسم مشترك"],
+    options: [
+      "العدد 2",
+      "القاسم المشترك الأكبر بينهما",
+      "المضاعف المشترك الأصغر بينهما",
+      "أي قاسم مشترك"
+    ],
     correctIndex: 1,
-    explanation: "من أجل اختزال كسر ما، نوجد القاسم المشترك الأكبر (GCD) للبسط والمقام ثم نقسم كليهما عليه للحصول على عددين أوليين فيما بينهما.",
+    explanation:
+        "من أجل اختزال كسر ما بأبسط صورة، نوجد القاسم المشترك الأكبر (GCD) للبسط والمقام ثم نقسم كليهما عليه للحصول على عددين أوليين فيما بينهما.",
   ),
   Question(
     id: 8,
     questionText: "العدد الدال على مساحة دائرة نصف قطرها يساوي الواحد هو:",
     options: ["عدد طبيعي", "عدد صحيح", "عدد عادي", "عدد غير عادي"],
     correctIndex: 3,
-    explanation: "مساحة الدائرة = π × r². إذا كان r=1، المساحة = π. وبما أن π عدد غير عادي، فالمساحة تمثل عدداً غير عادياً.",
+    explanation:
+        "مساحة الدائرة = π × r². إذا كان r = 1، فإن المساحة = π. وبما أن π عدد غير عادي، فالمساحة تمثل عدداً غير عادي.",
   ),
   Question(
     id: 9,
     questionText: "كتابة الجذر √12 بالشكل a√b هي:",
     options: ["3√2", "2√3", "4√3", "6√2"],
     correctIndex: 1,
-    explanation: "√12 = √(4 × 3) = √4 × √3 = 2√3.",
+    explanation: "نبسط الجذر: √12 = √(4 × 3) = √4 × √3 = 2√3.",
   ),
   Question(
     id: 10,
     questionText: "ناتج المقدار 3√5 × 2√7 هو:",
     options: ["5√12", "6√35", "6√12", "5√35"],
     correctIndex: 1,
-    explanation: "عند ضرب الجذور، نضرب المضمون بالمضمون والمرافق بالمرافق: 3 × 2 = 6 و √5 × √7 = √35. الناتج 6√35.",
+    explanation:
+        "عند ضرب الجذور، نضرب المعامل بالمعامل والمضمون بالمضمون: 3 × 2 = 6 و √5 × √7 = √35. الناتج النهائي هو 6√35.",
   ),
   Question(
     id: 11,
     questionText: "ناتج قسمة الجذور (6√18) ÷ (2√3) يساوي:",
     options: ["3√15", "4√6", "3√6", "12√6"],
     correctIndex: 2,
-    explanation: "نقسم المرافق على المرافق: 6 ÷ 2 = 3. ونقسم المضمون على المضمون: 18 ÷ 3 = 6. الناتج هو 3√6.",
+    explanation:
+        "نقسم المعامل على المعامل: 6 ÷ 2 = 3. ونقسم المضمون على المضمون: √(18 ÷ 3) = √6. الناتج هو 3√6.",
   ),
   Question(
     id: 12,
     questionText: "عند إزالة الجذر من مقام الكسر 2 / √3، يصبح الناتج:",
     options: ["√3 / 2", "2√3", "(2√3) / 3", "(3√2) / 2"],
     correctIndex: 2,
-    explanation: "نضرب البسط والمقام بالجذر الموجود في المقام: (2 × √3) / (√3 × √3) = (2√3) / 3.",
+    explanation:
+        "نضرب كلاً من البسط والمقام بالجذر الموجود في المقام: (2 × √3) / (√3 × √3) = (2√3) / 3.",
   ),
   Question(
     id: 13,
     questionText: "ناتج جمع الجذور 8√3 + 4√3 هو:",
     options: ["12√6", "12√3", "32√3", "لا يمكن جمعها"],
     correctIndex: 1,
-    explanation: "لجمع الجذور يجب أن تكون المضامين متشابهة. نحافظ على المضمون ونجمع المرافقات: (8 + 4)√3 = 12√3.",
+    explanation:
+        "لجمع الجذور يجب أن تكون المضامين متشابهة. نحافظ على الجذر المشترك ونجمع المعاملات: (8 + 4)√3 = 12√3.",
   ),
   Question(
     id: 14,
     questionText: "ما هي قيمة المقدار √(34 + √(1 + √9)) ؟",
     options: ["6", "7", "5", "8"],
     correctIndex: 0,
-    explanation: "نبدأ من أصغر جذر بالداخل: √9 = 3. ثم √(1+3) = √4 = 2. ثم √(34+2) = √36 = 6.",
+    explanation:
+        "نبدأ من الجذر الأعمق في الداخل: √9 = 3. ثم يصبح المقدار الداخلي √(1 + 3) = √4 = 2. وأخيراً الجذر الخارجي: √(34 + 2) = √36 = 6.",
   ),
   Question(
     id: 15,
     questionText: "ناتج قوة القوة (3⁴)⁵ يساوي:",
     options: ["3⁹", "3²⁰", "12⁵", "3⁻¹"],
     correctIndex: 1,
-    explanation: "حسب قاعدة قوة القوة، نضرب الأسس: (a^m)^n = a^(m×n). إذن 4 × 5 = 20، الناتج 3²⁰.",
+    explanation:
+        "حسب قاعدة قوة القوة، نضرب الأسس ببعضها: (a^m)^n = a^(m×n). إذن 4 × 5 = 20، والناتج هو 3²⁰.",
   ),
   Question(
     id: 16,
     questionText: "قيمة المقدار 7⁰ هي:",
     options: ["7", "0", "1", "70"],
     correctIndex: 2,
-    explanation: "أي عدد (غير الصفر) مرفوع للقوة صفر يساوي 1.",
+    explanation: "أي عدد حقيقي غير معدوم (لا يساوي الصفر) مرفوع للقوة صفر يساوي 1.",
   ),
   Question(
     id: 17,
     questionText: "كتابة العدد 10⁻³ بالشكل العشري هي:",
     options: ["1000", "0.001", "0.01", "0.0001"],
     correctIndex: 1,
-    explanation: "عندما تكون القوة سالبة نضع الأصفار بعد الفاصلة العشرية، 10⁻³ تعني وجود 3 أرقام بعد الفاصلة: 0.001.",
+    explanation:
+        "عندما تكون قوة العشرة سالبة، فإن العدد يمثل كسراً عشرياً، وتدل القوة 10⁻³ على وجود 3 منازل يمين الفاصلة العشرية: 0.001.",
   ),
   Question(
     id: 18,
     questionText: "ناتج ضرب القوى ذات الأساس المشترك 2³ × 2⁵ هو:",
     options: ["4⁸", "2¹⁵", "2⁸", "4¹⁵"],
     correctIndex: 2,
-    explanation: "في حالة ضرب القوى ذات الأساسات المتساوية، نجمع الأسس: 2^(3+5) = 2⁸.",
+    explanation:
+        "في حالة ضرب القوى ذات الأساسات المتساوية، نجمع الأسس: 2^(3+5) = 2⁸.",
   ),
   Question(
     id: 19,
     questionText: "ناتج قسمة القوى 2⁹ / 2⁴ هو:",
     options: ["2¹³", "1⁵", "2³⁶", "2⁵"],
     correctIndex: 3,
-    explanation: "في حالة قسمة القوى ذات الأساسات المتساوية، نطرح الأسس: 2^(9-4) = 2⁵.",
+    explanation:
+        "في حالة قسمة القوى ذات الأساسات المتساوية، نطرح أس المقام من أس البسط: 2^(9-4) = 2⁵.",
   ),
   Question(
     id: 20,
     questionText: "نصف العدد 6³ يساوي:",
-    options: ["3³", "6¹·⁵", "108", "216"],
+    options: ["3³", "6²", "108", "216"],
     correctIndex: 2,
-    explanation: "نصف العدد يعني قسمته على 2: 6³ / 2 = (6×6×6) / 2 = 216 / 2 = 108.",
+    explanation:
+        "نصف العدد يعني قسمته على 2: 6³ / 2 = (6 × 6 × 6) / 2 = 216 / 2 = 108.",
   ),
   Question(
     id: 21,
     questionText: "ثلث العدد 3⁴ هو:",
-    options: ["1⁴", "3³", "3⁵", "27"],
+    options: ["1⁴", "3²", "3⁵", "27"],
     correctIndex: 3,
-    explanation: "ثلث العدد يعني قسمته على 3: 3⁴ / 3¹ = 3^(4-1) = 3³ = 27.",
+    explanation:
+        "ثلث العدد يعني قسمته على 3: 3⁴ / 3¹ = 3^(4-1) = 3³ = 27. (تم تعديل الخيارات لضمان وجود إجابة صحيحة وحيدة وهي 27).",
   ),
   Question(
     id: 22,
     questionText: "العدد (√2)² هو عدد:",
-    options: ["صحيح", "غير عادي", "عشري فقط", "غير صحيح"],
+    options: ["صحيح", "غير عادي", "عشري غير صحيح", "سالب"],
     correctIndex: 0,
-    explanation: "التربيع يزيل الجذر التربيعي: (√2)² = 2 ، والعدد 2 هو عدد صحيح (وطبيعي).",
+    explanation:
+        "التربيع يذهب مع الجذر التربيعي الموجب: (√2)² = 2، والعدد 2 هو عدد صحيح (وطبيعي).",
   ),
   Question(
     id: 23,
     questionText: "القاسم المشترك الأكبر GCD(54, 36) يساوي:",
     options: ["9", "18", "12", "6"],
     correctIndex: 1,
-    explanation: "قواسم 54: 1, 2, 3, 6, 9, 18, 27, 54. قواسم 36: 1, 2, 3, 4, 6, 9, 12, 18, 36. المشترك الأكبر هو 18.",
+    explanation:
+        "قواسم 54 هي: 1, 2, 3, 6, 9, 18, 27, 54. وقواسم 36 هي: 1, 2, 3, 4, 6, 9, 12, 18, 36. أكبر قاسم مشترك بينهما هو 18.",
   ),
   Question(
     id: 24,
     questionText: "المقدار √27 + √12 يساوي:",
     options: ["√39", "5√3", "6√3", "لا يجمع"],
     correctIndex: 1,
-    explanation: "نبسط الجذور أولاً: √27 = 3√3 و √12 = 2√3. الجمع: 3√3 + 2√3 = 5√3.",
+    explanation:
+        "نبسط الجذور أولاً: √27 = √(9 × 3) = 3√3، وكذلك √12 = √(4 × 3) = 2√3. ثم نجمع: 3√3 + 2√3 = 5√3.",
   ),
   Question(
     id: 25,
     questionText: "قيمة المقدار (√(√5))⁴ هي:",
     options: ["√5", "25", "5", "125"],
     correctIndex: 2,
-    explanation: "القوة 4 تعني التربيع مرتين. التربيع الأول يزيل الجذر الخارجي لتصبح (√5)². والتربيع الثاني يزيل الجذر الداخلي ليصبح الناتج 5.",
+    explanation:
+        "الرفع للقوة 4 يعادل التربيع مرتين متتاليتين. التربيع الأول يزيل الجذر الخارجي لنحصل على (√5)²، والتربيع الثاني يزيل الجذر الداخلي ليصبح الناتج 5.",
   ),
   Question(
     id: 26,
     questionText: "ربع العدد 8⁵ يساوي:",
     options: ["2¹⁵", "2¹³", "2¹²", "4⁵"],
     correctIndex: 1,
-    explanation: "العدد 8 هو 2³، إذن 8⁵ = (2³)⁵ = 2¹⁵. ربعه يعني القسمة على 4 (وهي 2²). 2¹⁵ / 2² = 2¹³.",
+    explanation:
+        "نكتب الأعداد بدلالة الأساس 2: العدد 8 = 2³، ومنه 8⁵ = (2³)⁵ = 2¹⁵. والعدد 4 = 2². إذن ربع العدد هو: 2¹⁵ / 2² = 2^(15-2) = 2¹³.",
   ),
   Question(
     id: 27,
-    questionText: "العدد 0.00003 يكتب بالصيغة:",
+    questionText: "العدد 0.00003 يكتب بالصيغة العلمية:",
     options: ["3 × 10⁵", "3 × 10⁻⁴", "3 × 10⁻⁵", "3 × 10⁻⁶"],
     correctIndex: 2,
-    explanation: "الفاصلة تحركت 5 منازل لليمين، لذلك نضرب بقوة سالبة للعشرة: 3 × 10⁻⁵.",
+    explanation:
+        "لتحويل العدد إلى الصيغة العلمية نحرك الفاصلة العشرية 5 منازل نحو اليمين، لذلك نضرب بالقوة السالبة: 3 × 10⁻⁵.",
   ),
   Question(
     id: 28,
-    questionText: "طبيعة العدد π - (π/2) هي:",
+    questionText: "طبيعة العدد π - (π / 2) هي:",
     options: ["عدد صحيح", "عدد غير عادي", "عدد عادي", "صفر"],
     correctIndex: 1,
-    explanation: "الناتج هو π/2. بما أن π عدد غير عادي، فإن قسمته على 2 تعطي عدداً غير عادي أيضاً.",
+    explanation:
+        "بتوحيد المقامات نجد أن π - (π / 2) = π / 2. وبما أن π عدد غير عادي، فإن قسمته على 2 تعطي عدداً غير عادي أيضاً.",
   ),
   Question(
     id: 29,
     questionText: "إن العدد (√5 - √2)² هو:",
     options: ["عدد صحيح", "عدد عادي", "عدد غير عادي", "يساوي 3"],
     correctIndex: 2,
-    explanation: "المربع الأول - ضعفي الأول بالثاني + مربع الثاني. 5 - 2√10 + 2 = 7 - 2√10. وجود الجذر الأصم يجعله غير عادي.",
+    explanation:
+        "نفك المتطابقة التربيعية (مربع الأول - ضعفي الأول بالثاني + مربع الثاني): (√5)² - 2(√5)(√2) + (√2)² = 5 - 2√10 + 2 = 7 - 2√10. وبما أن √10 جذر أصم، فالناتج عدد غير عادي.",
   ),
   Question(
     id: 30,
     questionText: "ناتج نشر الجداء (x - √3)(x + √3) يساوي:",
     options: ["x² + 3", "x² - 3", "x² - √3", "x² - 9"],
     correctIndex: 1,
-    explanation: "متطابقة (فرق مربعي حدين): (a-b)(a+b) = a² - b². المربع الأول x² ناقص مربع الثاني (√3)² = 3. الناتج x² - 3.",
+    explanation:
+        "تطبيق مباشر لمتطابقة فرق مربعي حدين: (a - b)(a + b) = a² - b². مربع الحد الأول x² ناقص مربع الحد الثاني (√3)² = 3، فيكون الناتج x² - 3.",
   ),
 ];
 
@@ -245,10 +388,9 @@ class MathQuizApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        fontFamily: 'Arial', // Fallback font, assuming Arabic support
+        fontFamily: 'Arial',
         scaffoldBackgroundColor: const Color(0xFFF3F4F6),
       ),
-      // إجبار التطبيق على أن يكون من اليمين لليسار (RTL) لدعم اللغة العربية
       builder: (context, child) {
         return Directionality(
           textDirection: TextDirection.rtl,
@@ -267,7 +409,7 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -277,11 +419,41 @@ class HomeScreen extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF1E40AF), // blue-800
+                  color: Color(0xFF1E40AF),
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 48),
+              const SizedBox(height: 12),
+              const Text(
+                'إعداد: المهندسة بشرى ابراهيم',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black54,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.phone_android, size: 18, color: Colors.blue.shade700),
+                    const SizedBox(width: 6),
+                    Text(
+                      '0995386583',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 40),
               Wrap(
                 spacing: 24,
                 runSpacing: 24,
@@ -326,11 +498,13 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSubjectCard(BuildContext context,
-      {required String title,
-      required IconData icon,
-      required MaterialColor color,
-      required VoidCallback onTap}) {
+  Widget _buildSubjectCard(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required MaterialColor color,
+    required VoidCallback onTap,
+  }) {
     return Material(
       color: Colors.white,
       borderRadius: BorderRadius.circular(24),
@@ -375,7 +549,10 @@ class AlgebraScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('قسم الجبر', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text(
+          'قسم الجبر',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         backgroundColor: Colors.white,
         foregroundColor: const Color(0xFF1E40AF),
         elevation: 1,
@@ -398,7 +575,8 @@ class AlgebraScreen extends StatelessWidget {
                     onTap: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const QuizScreen()),
+                        MaterialPageRoute(
+                            builder: (context) => const QuizScreen()),
                       );
                     },
                     borderRadius: BorderRadius.circular(16),
@@ -420,7 +598,8 @@ class AlgebraScreen extends StatelessWidget {
                               color: Colors.blue.shade50,
                               shape: BoxShape.circle,
                             ),
-                            child: Icon(Icons.assignment, color: Colors.blue.shade600),
+                            child: Icon(Icons.assignment,
+                                color: Colors.blue.shade600),
                           ),
                           const SizedBox(height: 16),
                           const Text(
@@ -434,14 +613,14 @@ class AlgebraScreen extends StatelessWidget {
                           const SizedBox(height: 4),
                           const Text(
                             'طبيعة الأعداد والكسور',
-                            style: TextStyle(fontSize: 14, color: Colors.black54),
+                            style:
+                                TextStyle(fontSize: 14, color: Colors.black54),
                           ),
                         ],
                       ),
                     ),
                   ),
                 ),
-                // يمكن إضافة بطاقات أخرى هنا مستقبلاً
               ],
             ),
           ],
@@ -467,14 +646,20 @@ class _QuizScreenState extends State<QuizScreen> {
   final ScrollController _navScrollController = ScrollController();
   final ScrollController _mainScrollController = ScrollController();
 
+  @override
+  void dispose() {
+    _navScrollController.dispose();
+    _mainScrollController.dispose();
+    super.dispose();
+  }
+
   void selectOption(int selectedIndex) {
-    if (userAnswers[currentQuestionIndex] != null) return; // Prevent multi-select
+    if (userAnswers[currentQuestionIndex] != null) return;
 
     setState(() {
       userAnswers[currentQuestionIndex] = selectedIndex;
     });
 
-    // Auto-scroll to feedback (simple approximation)
     Future.delayed(const Duration(milliseconds: 300), () {
       if (_mainScrollController.hasClients) {
         _mainScrollController.animateTo(
@@ -513,9 +698,9 @@ class _QuizScreenState extends State<QuizScreen> {
 
   void _scrollToCurrentNav() {
     if (_navScrollController.hasClients) {
-      double position = currentQuestionIndex * 56.0; // Approx width of item + spacing
+      double position = currentQuestionIndex * 48.0;
       _navScrollController.animateTo(
-        position,
+        position.clamp(0.0, _navScrollController.position.maxScrollExtent),
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
@@ -568,11 +753,43 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        title: const Column(
+        toolbarHeight: 82, // توسيع الارتفاع ليتسع للاسم ورقم الموبايل كاملاً دون اقتطاع
+        titleSpacing: 8,
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text('اختبار طبيعة الأعداد والكسور', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-            Text('الصف التاسع الأساسي - إعداد : المهندسة بشرى ابراهيم - 0995386583', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w400)),
+            const Text(
+              'اختبار طبيعة الأعداد والكسور',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'الصف التاسع الأساسي - إعداد: المهندسة بشرى ابراهيم',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w500),
+              maxLines: 1,
+              overflow: TextOverflow.visible,
+            ),
+            const SizedBox(height: 2),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.phone, size: 13, color: Colors.white70),
+                const SizedBox(width: 4),
+                Directionality(
+                  textDirection: TextDirection.ltr,
+                  child: const Text(
+                    '0995386583',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
         backgroundColor: Colors.blue.shade700,
@@ -580,7 +797,7 @@ class _QuizScreenState extends State<QuizScreen> {
       ),
       body: Column(
         children: [
-          // Top Action Buttons
+          // أزرار التحكم العلوية
           if (!isReviewMode)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -593,21 +810,38 @@ class _QuizScreenState extends State<QuizScreen> {
                 children: [
                   TextButton.icon(
                     onPressed: resetQuiz,
-                    icon: const Icon(Icons.refresh, color: Colors.red),
-                    label: const Text('إعادة الاختبار', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                    style: TextButton.styleFrom(backgroundColor: Colors.red.shade50),
+                    icon: const Icon(Icons.refresh, color: Colors.red, size: 20),
+                    label: const Text(
+                      'إعادة الاختبار',
+                      style: TextStyle(
+                          color: Colors.red, fontWeight: FontWeight.bold),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.red.shade50,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
                   ),
                   TextButton.icon(
                     onPressed: finishQuiz,
-                    icon: const Icon(Icons.flag, color: Colors.purple),
-                    label: const Text('إنهاء وعرض النتيجة', style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold)),
-                    style: TextButton.styleFrom(backgroundColor: Colors.purple.shade50),
+                    icon:
+                        const Icon(Icons.flag, color: Colors.purple, size: 20),
+                    label: const Text(
+                      'إنهاء وعرض النتيجة',
+                      style: TextStyle(
+                          color: Colors.purple, fontWeight: FontWeight.bold),
+                    ),
+                    style: TextButton.styleFrom(
+                      backgroundColor: Colors.purple.shade50,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                    ),
                   ),
                 ],
               ),
             ),
 
-          // Question Navigation Bar
+          // شريط التنقل بين الأسئلة
           Container(
             height: 64,
             color: Colors.grey.shade50,
@@ -622,58 +856,71 @@ class _QuizScreenState extends State<QuizScreen> {
               },
             ),
           ),
-          
-          // Main Question Area
+
+          // منطقة عرض السؤال والخيارات
           Expanded(
             child: ListView(
               controller: _mainScrollController,
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.all(20),
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
                       'السؤال ${currentQuestionIndex + 1} من ${quizData.length}',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      style: const TextStyle(
+                          fontSize: 19, fontWeight: FontWeight.bold),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade100,
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         'النقاط: $score',
-                        style: TextStyle(color: Colors.blue.shade800, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            color: Colors.blue.shade800,
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
-                Text(
+                const SizedBox(height: 20),
+                
+                // نص السؤال مع المعالجة الذكية لاتجاه المعادلات الرياضية
+                MixedDirectionText(
                   question.questionText,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.5),
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w600,
+                    height: 1.6,
+                    color: Colors.black87,
+                  ),
                 ),
                 const SizedBox(height: 24),
-                
-                // Options
+
+                // الخيارات
                 ...List.generate(question.options.length, (index) {
                   return _buildOptionButton(question, index, hasAnswered);
                 }),
 
-                // Feedback Section
+                // صندوق التبرير والنتيجة الفورية
                 if (hasAnswered) ...[
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: userAnswers[currentQuestionIndex] == question.correctIndex
+                      color: userAnswers[currentQuestionIndex] ==
+                              question.correctIndex
                           ? Colors.green.shade50
                           : Colors.red.shade50,
                       border: Border.all(
-                        color: userAnswers[currentQuestionIndex] == question.correctIndex
-                            ? Colors.green.shade200
-                            : Colors.red.shade200,
+                        color: userAnswers[currentQuestionIndex] ==
+                                question.correctIndex
+                            ? Colors.green.shade300
+                            : Colors.red.shade300,
                       ),
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -681,13 +928,15 @@ class _QuizScreenState extends State<QuizScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          userAnswers[currentQuestionIndex] == question.correctIndex
+                          userAnswers[currentQuestionIndex] ==
+                                  question.correctIndex
                               ? 'إجابة صحيحة ممتاز! 👏'
                               : 'إجابة خاطئة! ❌',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            color: userAnswers[currentQuestionIndex] == question.correctIndex
+                            color: userAnswers[currentQuestionIndex] ==
+                                    question.correctIndex
                                 ? Colors.green.shade800
                                 : Colors.red.shade800,
                           ),
@@ -695,12 +944,18 @@ class _QuizScreenState extends State<QuizScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'التبرير / طريقة الحل:',
-                          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
+                        const SizedBox(height: 6),
+                        MixedDirectionText(
                           question.explanation,
-                          style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.black87),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            height: 1.6,
+                            color: Colors.black87,
+                          ),
                         ),
                       ],
                     ),
@@ -710,7 +965,7 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
 
-          // Bottom Controls
+          // أزرار التنقل السفلية (السابق / التالي)
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -725,9 +980,11 @@ class _QuizScreenState extends State<QuizScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.grey.shade300,
                     foregroundColor: Colors.black87,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 12),
                   ),
-                  child: const Text('السابق', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text('السابق',
+                      style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
                 if (allAnswered && !isReviewMode)
                   ElevatedButton(
@@ -735,19 +992,25 @@ class _QuizScreenState extends State<QuizScreen> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.purple.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                     ),
-                    child: const Text('عرض النتيجة النهائية', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('عرض النتيجة النهائية',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   )
                 else
                   ElevatedButton(
-                    onPressed: currentQuestionIndex < quizData.length - 1 ? nextQuestion : null,
+                    onPressed: currentQuestionIndex < quizData.length - 1
+                        ? nextQuestion
+                        : null,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                     ),
-                    child: const Text('التالي', style: TextStyle(fontWeight: FontWeight.bold)),
+                    child: const Text('التالي',
+                        style: TextStyle(fontWeight: FontWeight.bold)),
                   ),
               ],
             ),
@@ -772,12 +1035,10 @@ class _QuizScreenState extends State<QuizScreen> {
       textColor = Colors.white;
     }
 
-    if (isActive) {
-      if (!isAnswered) {
-        bgColor = Colors.blue.shade100;
-        borderColor = Colors.blue.shade600;
-        textColor = Colors.blue.shade800;
-      }
+    if (isActive && !isAnswered) {
+      bgColor = Colors.blue.shade100;
+      borderColor = Colors.blue.shade600;
+      textColor = Colors.blue.shade800;
     }
 
     return GestureDetector(
@@ -851,16 +1112,22 @@ class _QuizScreenState extends State<QuizScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
-                child: Text(
-                  question.options[index],
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
-                    color: textColor,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: MixedDirectionText(
+                    question.options[index],
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
                   ),
                 ),
               ),
-              if (icon != null) Icon(icon, color: iconColor),
+              if (icon != null) ...[
+                const SizedBox(width: 12),
+                Icon(icon, color: iconColor),
+              ],
             ],
           ),
         ),
@@ -885,7 +1152,8 @@ class _QuizScreenState extends State<QuizScreen> {
       message = "مقبول. تحتاج إلى مراجعة قواعد الجذور والقوى بتركيز أكبر. 📚";
       messageColor = Colors.deepOrange.shade500;
     } else {
-      message = "لم يحالفك الحظ. ننصحك بإعادة قراءة الملف المرفق وحل التمارين مجدداً. 💪";
+      message =
+          "لم يحالفك الحظ. ننصحك بإعادة قراءة الدرس وحل التمارين مجدداً. 💪";
       messageColor = Colors.red.shade600;
     }
 
@@ -907,12 +1175,15 @@ class _QuizScreenState extends State<QuizScreen> {
                 style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
-              Text(
-                '$score / ${quizData.length}',
-                style: TextStyle(
-                  fontSize: 72,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.blue.shade700,
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(
+                  '$score / ${quizData.length}',
+                  style: TextStyle(
+                    fontSize: 68,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.blue.shade700,
+                  ),
                 ),
               ),
               const SizedBox(height: 24),
@@ -934,23 +1205,31 @@ class _QuizScreenState extends State<QuizScreen> {
                   ElevatedButton.icon(
                     onPressed: resetQuiz,
                     icon: const Icon(Icons.refresh),
-                    label: const Text('إعادة الاختبار', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    label: const Text('إعادة الاختبار',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blue.shade600,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
                   ElevatedButton.icon(
                     onPressed: reviewAnswers,
                     icon: const Icon(Icons.list_alt),
-                    label: const Text('مراجعة الإجابات', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    label: const Text('مراجعة الإجابات',
+                        style: TextStyle(
+                            fontSize: 18, fontWeight: FontWeight.bold)),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.grey.shade200,
                       foregroundColor: Colors.black87,
-                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 32, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       elevation: 0,
                     ),
                   ),
