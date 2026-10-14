@@ -21,93 +21,108 @@ class Question {
   });
 }
 
-// أداة ذكية لفصل النصوص العربية عن المعادلات الرياضية لضمان عرض الجذور والكسور والأسس بشكل صحيح (LTR) داخل سياق عربي (RTL)
-class MixedDirectionText extends StatelessWidget {
+/// أداة عرض النصوص المختلطة (عربي + رياضيات) بدقة 100%
+/// أي نص يوضع داخل [...] يتم عرضه ككتلة رياضية مستقلة من اليسار لليمين (LTR)
+/// مع فرض اتجاه الحروف الصارم (LRO) لمنع انقلاب الأسس السالبة أو الجذور أو الأقواس.
+class MathRichText extends StatelessWidget {
   final String text;
   final TextStyle style;
   final TextAlign textAlign;
+  final bool highlightMath;
 
-  const MixedDirectionText(
+  const MathRichText(
     this.text, {
     super.key,
     required this.style,
     this.textAlign = TextAlign.start,
+    this.highlightMath = true,
   });
 
-  // تعبير نمطي يلتقط أي معادلة رياضية أو أرقام أو جذور أو رموز لاتينية متجاورة
-  static final RegExp _mathRegex = RegExp(
-    r'[a-zA-Z0-9π√²³⁴⁵⁶⁷⁸⁹⁰⁻⁺·÷×+/=()-]+(?:\s*[a-zA-Z0-9π√²³⁴⁵⁶⁷⁸⁹⁰⁻⁺·÷×+/=()-]+)*',
-  );
-
-  bool _isPureMath(String s) {
-    final trimmed = s.trim();
-    if (trimmed.isEmpty) return false;
-    // إذا كانت مجرد شرطة عادية أو قوس فارغ بدون أرقام أو رموز رياضية، نتركها للسياق العربي
-    if (trimmed == '-' || trimmed == '(' || trimmed == ')') return false;
-    return true;
+  // فرض اتجاه اليسار لليمين (Left-to-Right Override) حرفياً لمنع انقلاب الرموز مثل 3⁻¹
+  String _enforceStrictLtr(String input) {
+    return '\u202D$input\u202C';
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<InlineSpan> spans = [];
-    int lastMatchEnd = 0;
+    // إذا كان النص كله عبارة عن معادلة واحدة (مثل الخيارات) ولا يحتوي على أقواس [...]
+    if (!text.contains('[') && !text.contains(']')) {
+      // التحقق مما إذا كان النص يحتوي على رموز رياضية فقط بدون حروف عربية
+      final bool hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(text);
+      if (!hasArabic) {
+        return Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            _enforceStrictLtr(text),
+            style: style.copyWith(
+              fontFamily: 'Roboto',
+              letterSpacing: 0.5,
+            ),
+          ),
+        );
+      }
+    }
 
-    for (final Match match in _mathRegex.allMatches(text)) {
-      // إضافة النص العربي الذي يسبق المعادلة الرياضية
-      if (match.start > lastMatchEnd) {
+    final List<InlineSpan> spans = [];
+    final RegExp bracketRegex = RegExp(r'\[([^\]]+)\]');
+    int lastEnd = 0;
+
+    for (final Match match in bracketRegex.allMatches(text)) {
+      // إضافة النص العربي الذي يسبق المعادلة
+      if (match.start > lastEnd) {
         spans.add(
           TextSpan(
-            text: text.substring(lastMatchEnd, match.start),
+            text: text.substring(lastEnd, match.start),
             style: style,
           ),
         );
       }
 
-      final String mathSegment = match.group(0)!;
+      final String mathContent = match.group(1)!;
 
-      // فصل المسافات البادئة واللاحقة لكي لا تلتصق الكلمات العربية بالمعادلة
-      final String leadingSpaces =
-          RegExp(r'^\s*').firstMatch(mathSegment)?.group(0) ?? '';
-      final String trailingSpaces =
-          RegExp(r'\s*$').firstMatch(mathSegment)?.group(0) ?? '';
-      final String coreMath = mathSegment.trim();
-
-      if (leadingSpaces.isNotEmpty) {
-        spans.add(TextSpan(text: leadingSpaces, style: style));
-      }
-
-      if (_isPureMath(coreMath)) {
-        spans.add(
-          WidgetSpan(
-            alignment: PlaceholderAlignment.baseline,
-            baseline: TextBaseline.alphabetic,
+      // إضافة المعادلة الرياضية داخل صندوق LTR معزول تماماً عن السياق العربي
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.middle,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
+            padding: highlightMath
+                ? const EdgeInsets.symmetric(horizontal: 7, vertical: 2)
+                : EdgeInsets.zero,
+            decoration: highlightMath
+                ? BoxDecoration(
+                    color: Colors.blue.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: Colors.blue.withOpacity(0.2),
+                      width: 1,
+                    ),
+                  )
+                : null,
             child: Directionality(
               textDirection: TextDirection.ltr,
               child: Text(
-                coreMath,
+                _enforceStrictLtr(mathContent),
                 style: style.copyWith(
-                  fontFamily: 'Roboto', // خط واضح للأرقام والرموز الرياضية
+                  fontFamily: 'Roboto',
+                  fontWeight: FontWeight.bold,
+                  height: 1.2,
+                  letterSpacing: 0.5,
                 ),
               ),
             ),
           ),
-        );
-      } else {
-        spans.add(TextSpan(text: coreMath, style: style));
-      }
+        ),
+      );
 
-      if (trailingSpaces.isNotEmpty) {
-        spans.add(TextSpan(text: trailingSpaces, style: style));
-      }
-
-      lastMatchEnd = match.end;
+      lastEnd = match.end;
     }
 
-    // إضافة ما تبقى من النص العربي بعد آخر معادلة
-    if (lastMatchEnd < text.length) {
+    // إضافة النص العربي المتبقي بعد آخر معادلة
+    if (lastEnd < text.length) {
       spans.add(
         TextSpan(
-          text: text.substring(lastMatchEnd),
+          text: text.substring(lastEnd),
           style: style,
         ),
       );
@@ -124,15 +139,15 @@ class MixedDirectionText extends StatelessWidget {
   }
 }
 
-// قاعدة بيانات الأسئلة (30 سؤالاً) بعد ضبط وتدقيق الخيارات الرياضية
+// قاعدة بيانات الأسئلة (30 سؤالاً) مع تأطير جميع المعادلات بـ [...] لضمان عدم التداخل نهائياً
 final List<Question> quizData = [
   Question(
     id: 1,
-    questionText: "ما هي طبيعة العدد π ؟",
+    questionText: "ما هي طبيعة العدد [π] ؟",
     options: ["عدد صحيح", "عدد عشري", "عدد غير عادي", "عدد عادي"],
     correctIndex: 2,
     explanation:
-        "العدد π هو عدد غير عادي لأن كتابته العشرية غير منتهية وغير دورية (قيمته التقريبية 3.14159...).",
+        "العدد [π] هو عدد غير عادي لأن كتابته العشرية غير منتهية وغير دورية، وقيمته التقريبية هي [3.14159...].",
   ),
   Question(
     id: 2,
@@ -141,58 +156,63 @@ final List<Question> quizData = [
     options: ["√16", "√2", "√25", "√100"],
     correctIndex: 1,
     explanation:
-        "العدد √2 هو جذر أصم وعدد غير عادي، لأن ناتجه كتابة عشرية غير منتهية (1.4142...). بينما بقية الخيارات لها جذور صحيحة.",
+        "العدد [√2] هو جذر أصم وعدد غير عادي، لأن ناتجه كتابة عشرية غير منتهية [1.4142...]، بينما بقية الخيارات لها جذور صحيحة.",
   ),
   Question(
     id: 3,
-    questionText: "العدد (-5) ينتمي إلى مجموعة الأعداد:",
-    options: ["الطبيعية (N)", "الصحيحة (Z)", "غير العادية", "العشرية الموجبة"],
+    questionText: "العدد [-5] ينتمي إلى مجموعة الأعداد:",
+    options: [
+      "الطبيعية [N]",
+      "الصحيحة [Z]",
+      "غير العادية",
+      "العشرية الموجبة"
+    ],
     correctIndex: 1,
     explanation:
-        "الأعداد الصحيحة (Z) لا تحتوي على فاصلة عشرية وتشمل الأعداد الموجبة والسالبة. العدد الطبيعي يجب أن يكون موجباً.",
+        "الأعداد الصحيحة [Z] لا تحتوي على فاصلة عشرية وتشمل الأعداد الموجبة والسالبة والصفر، بينما العدد الطبيعي يجب أن يكون موجباً.",
   ),
   Question(
     id: 4,
-    questionText: "القاسم المشترك الأكبر للعددين GCD(14, 14) يساوي:",
+    questionText: "القاسم المشترك الأكبر للعددين [GCD(14, 14)] يساوي:",
     options: ["1", "0", "14", "28"],
     correctIndex: 2,
     explanation:
-        "القاسم المشترك الأكبر للعدد نفسه هو العدد نفسه. حسب القاعدة: GCD(a, a) = a.",
+        "القاسم المشترك الأكبر للعدد مع نفسه يساوي العدد نفسه دائماً حسب القاعدة: [GCD(a, a) = a].",
   ),
   Question(
     id: 5,
-    questionText: "متى يقبل العدد القسمة على 3 دون باقٍ؟",
+    questionText: "متى يقبل العدد القسمة على [3] دون باقٍ؟",
     options: [
       "إذا كان آحاده صفر أو خمسة",
       "إذا كان آحاده زوجياً",
-      "إذا كان مجموع أرقامه من مضاعفات العدد 3",
+      "إذا كان مجموع أرقامه من مضاعفات العدد [3]",
       "إذا كان عدداً فردياً"
     ],
     correctIndex: 2,
     explanation:
-        "القاعدة تنص على أن العدد يقبل القسمة على 3 إذا كان مجموع أرقامه من مضاعفات العدد 3 (مثل 12، 15، 108).",
+        "القاعدة تنص على أن العدد يقبل القسمة على [3] إذا كان مجموع أرقامه من مضاعفات العدد [3]، مثل الأعداد [12] و [15] و [108].",
   ),
   Question(
     id: 6,
     questionText:
-        "باستخدام خوارزمية الطرح المتتالي أو القسمة، ما هو القاسم المشترك الأكبر للعددين (512, 224)؟",
+        "باستخدام خوارزمية الطرح المتتالي أو القسمة، ما هو القاسم المشترك الأكبر للعددين [(512, 224)]؟",
     options: ["32", "64", "16", "8"],
     correctIndex: 0,
     explanation:
-        "بطريقة القسمة الإقليدية: 512 ÷ 224 = 2 والباقي 64. ثم 224 ÷ 64 = 3 والباقي 32. ثم 64 ÷ 32 = 2 والباقي 0. آخر باقٍ غير معدوم هو 32.",
+        "بطريقة القسمة الإقليدية: نقسم [512 ÷ 224 = 2] والباقي [64]، ثم [224 ÷ 64 = 3] والباقي [32]، ثم [64 ÷ 32 = 2] والباقي [0]. آخر باقٍ غير معدوم هو [32].",
   ),
   Question(
     id: 7,
-    questionText: "للحصول على كسر مختزل، نقسم البسط والمقام على:",
+    questionText: "للحصول على كسر مختزل بأبسط صورة، نقسم البسط والمقام على:",
     options: [
-      "العدد 2",
+      "العدد [2]",
       "القاسم المشترك الأكبر بينهما",
       "المضاعف المشترك الأصغر بينهما",
       "أي قاسم مشترك"
     ],
     correctIndex: 1,
     explanation:
-        "من أجل اختزال كسر ما بأبسط صورة، نوجد القاسم المشترك الأكبر (GCD) للبسط والمقام ثم نقسم كليهما عليه للحصول على عددين أوليين فيما بينهما.",
+        "من أجل اختزال كسر إلى أبسط صورة، نوجد القاسم المشترك الأكبر [GCD] للبسط والمقام ثم نقسم كليهما عليه للحصول على عددين أوليين فيما بينهما.",
   ),
   Question(
     id: 8,
@@ -200,181 +220,183 @@ final List<Question> quizData = [
     options: ["عدد طبيعي", "عدد صحيح", "عدد عادي", "عدد غير عادي"],
     correctIndex: 3,
     explanation:
-        "مساحة الدائرة = π × r². إذا كان r = 1، فإن المساحة = π. وبما أن π عدد غير عادي، فالمساحة تمثل عدداً غير عادي.",
+        "قانون مساحة الدائرة هو [S = π × r²]. وبما أن نصف القطر [r = 1]، فإن المساحة تساوي [π]، وهو عدد غير عادي.",
   ),
   Question(
     id: 9,
-    questionText: "كتابة الجذر √12 بالشكل a√b هي:",
+    questionText: "كتابة الجذر [√12] بالشكل [a√b] هي:",
     options: ["3√2", "2√3", "4√3", "6√2"],
     correctIndex: 1,
-    explanation: "نبسط الجذر: √12 = √(4 × 3) = √4 × √3 = 2√3.",
+    explanation:
+        "نقوم بتحليل المضمون إلى جداء عددين أحدهما مربع كامل: [√12 = √(4 × 3) = √4 × √3 = 2√3].",
   ),
   Question(
     id: 10,
-    questionText: "ناتج المقدار 3√5 × 2√7 هو:",
+    questionText: "ناتج المقدار [3√5 × 2√7] هو:",
     options: ["5√12", "6√35", "6√12", "5√35"],
     correctIndex: 1,
     explanation:
-        "عند ضرب الجذور، نضرب المعامل بالمعامل والمضمون بالمضمون: 3 × 2 = 6 و √5 × √7 = √35. الناتج النهائي هو 6√35.",
+        "عند ضرب الجذور، نضرب المعامل بالمعامل: [3 × 2 = 6]، ونضرب المضمون بالمضمون: [√5 × √7 = √35]، فيكون الناتج [6√35].",
   ),
   Question(
     id: 11,
-    questionText: "ناتج قسمة الجذور (6√18) ÷ (2√3) يساوي:",
+    questionText: "ناتج قسمة الجذور [(6√18) ÷ (2√3)] يساوي:",
     options: ["3√15", "4√6", "3√6", "12√6"],
     correctIndex: 2,
     explanation:
-        "نقسم المعامل على المعامل: 6 ÷ 2 = 3. ونقسم المضمون على المضمون: √(18 ÷ 3) = √6. الناتج هو 3√6.",
+        "نقسم المعامل على المعامل: [6 ÷ 2 = 3]، ونقسم المضمون على المضمون تحت الجذر: [√(18 ÷ 3) = √6]، فيكون الناتج [3√6].",
   ),
   Question(
     id: 12,
-    questionText: "عند إزالة الجذر من مقام الكسر 2 / √3، يصبح الناتج:",
+    questionText: "عند إزالة الجذر من مقام الكسر [2 / √3]، يصبح الناتج:",
     options: ["√3 / 2", "2√3", "(2√3) / 3", "(3√2) / 2"],
     correctIndex: 2,
     explanation:
-        "نضرب كلاً من البسط والمقام بالجذر الموجود في المقام: (2 × √3) / (√3 × √3) = (2√3) / 3.",
+        "نضرب كلاً من البسط والمقام بالجذر الموجود في المقام [√3]، فنحصل على: [(2 × √3) / (√3 × √3) = (2√3) / 3].",
   ),
   Question(
     id: 13,
-    questionText: "ناتج جمع الجذور 8√3 + 4√3 هو:",
+    questionText: "ناتج جمع الجذور [8√3 + 4√3] هو:",
     options: ["12√6", "12√3", "32√3", "لا يمكن جمعها"],
     correctIndex: 1,
     explanation:
-        "لجمع الجذور يجب أن تكون المضامين متشابهة. نحافظ على الجذر المشترك ونجمع المعاملات: (8 + 4)√3 = 12√3.",
+        "لجمع الجذور المتشابهة نحافظ على الجذر المشترك [√3] ونجمع المعاملات فقط: [(8 + 4)√3 = 12√3].",
   ),
   Question(
     id: 14,
-    questionText: "ما هي قيمة المقدار √(34 + √(1 + √9)) ؟",
+    questionText: "ما هي قيمة المقدار [√(34 + √(1 + √9))] ؟",
     options: ["6", "7", "5", "8"],
     correctIndex: 0,
     explanation:
-        "نبدأ من الجذر الأعمق في الداخل: √9 = 3. ثم يصبح المقدار الداخلي √(1 + 3) = √4 = 2. وأخيراً الجذر الخارجي: √(34 + 2) = √36 = 6.",
+        "نبدأ من الجذر الداخلي الأعمق: [√9 = 3]، ثم نحسب الجذر الأوسط: [√(1 + 3) = √4 = 2]، وأخيراً الجذر الخارجي: [√(34 + 2) = √36 = 6].",
   ),
   Question(
     id: 15,
-    questionText: "ناتج قوة القوة (3⁴)⁵ يساوي:",
+    questionText: "ناتج قوة القوة [(3⁴)⁵] يساوي:",
     options: ["3⁹", "3²⁰", "12⁵", "3⁻¹"],
     correctIndex: 1,
     explanation:
-        "حسب قاعدة قوة القوة، نضرب الأسس ببعضها: (a^m)^n = a^(m×n). إذن 4 × 5 = 20، والناتج هو 3²⁰.",
+        "حسب قاعدة قوة القوة نضرب الأسس ببعضها: [(aᵐ)ⁿ = aᵐˣⁿ]. إذن نضرب الأسين [4 × 5 = 20]، ويكون الناتج هو [3²⁰].",
   ),
   Question(
     id: 16,
-    questionText: "قيمة المقدار 7⁰ هي:",
+    questionText: "قيمة المقدار [7⁰] هي:",
     options: ["7", "0", "1", "70"],
     correctIndex: 2,
-    explanation: "أي عدد حقيقي غير معدوم (لا يساوي الصفر) مرفوع للقوة صفر يساوي 1.",
+    explanation:
+        "أي عدد حقيقي غير معدوم (لا يساوي الصفر) مرفوع للقوة صفر يساوي [1] دائماً: [a⁰ = 1].",
   ),
   Question(
     id: 17,
-    questionText: "كتابة العدد 10⁻³ بالشكل العشري هي:",
+    questionText: "كتابة العدد [10⁻³] بالشكل العشري هي:",
     options: ["1000", "0.001", "0.01", "0.0001"],
     correctIndex: 1,
     explanation:
-        "عندما تكون قوة العشرة سالبة، فإن العدد يمثل كسراً عشرياً، وتدل القوة 10⁻³ على وجود 3 منازل يمين الفاصلة العشرية: 0.001.",
+        "القوة السالبة للعدد عشرة تعني كسراً عشرياً، والأس [-3] يدل على وجود [3] أرقام يمين الفاصلة العشرية، أي [0.001].",
   ),
   Question(
     id: 18,
-    questionText: "ناتج ضرب القوى ذات الأساس المشترك 2³ × 2⁵ هو:",
+    questionText: "ناتج ضرب القوى ذات الأساس المشترك [2³ × 2⁵] هو:",
     options: ["4⁸", "2¹⁵", "2⁸", "4¹⁵"],
     correctIndex: 2,
     explanation:
-        "في حالة ضرب القوى ذات الأساسات المتساوية، نجمع الأسس: 2^(3+5) = 2⁸.",
+        "في حالة ضرب القوى ذات الأساسات المتساوية نجمع الأسس: [2³ × 2⁵ = 2³⁺⁵ = 2⁸].",
   ),
   Question(
     id: 19,
-    questionText: "ناتج قسمة القوى 2⁹ / 2⁴ هو:",
+    questionText: "ناتج قسمة القوى [2⁹ / 2⁴] هو:",
     options: ["2¹³", "1⁵", "2³⁶", "2⁵"],
     correctIndex: 3,
     explanation:
-        "في حالة قسمة القوى ذات الأساسات المتساوية، نطرح أس المقام من أس البسط: 2^(9-4) = 2⁵.",
+        "في حالة قسمة القوى ذات الأساسات المتساوية نطرح أس المقام من أس البسط: [2⁹ / 2⁴ = 2⁹⁻⁴ = 2⁵].",
   ),
   Question(
     id: 20,
-    questionText: "نصف العدد 6³ يساوي:",
+    questionText: "نصف العدد [6³] يساوي:",
     options: ["3³", "6²", "108", "216"],
     correctIndex: 2,
     explanation:
-        "نصف العدد يعني قسمته على 2: 6³ / 2 = (6 × 6 × 6) / 2 = 216 / 2 = 108.",
+        "نصف العدد يعني قسمته على [2]، وبما أن [6³ = 6 × 6 × 6 = 216]، فإن نصفه هو [216 ÷ 2 = 108].",
   ),
   Question(
     id: 21,
-    questionText: "ثلث العدد 3⁴ هو:",
+    questionText: "ثلث العدد [3⁴] هو:",
     options: ["1⁴", "3²", "3⁵", "27"],
     correctIndex: 3,
     explanation:
-        "ثلث العدد يعني قسمته على 3: 3⁴ / 3¹ = 3^(4-1) = 3³ = 27. (تم تعديل الخيارات لضمان وجود إجابة صحيحة وحيدة وهي 27).",
+        "ثلث العدد يعني قسمته على [3]، فنكتب: [3⁴ / 3¹ = 3⁴⁻¹ = 3³ = 27].",
   ),
   Question(
     id: 22,
-    questionText: "العدد (√2)² هو عدد:",
+    questionText: "العدد [(√2)²] هو عدد:",
     options: ["صحيح", "غير عادي", "عشري غير صحيح", "سالب"],
     correctIndex: 0,
     explanation:
-        "التربيع يذهب مع الجذر التربيعي الموجب: (√2)² = 2، والعدد 2 هو عدد صحيح (وطبيعي).",
+        "التربيع يختصر الجذر التربيعي الموجب: [(√2)² = 2]، والعدد [2] هو عدد صحيح (وطبيعي).",
   ),
   Question(
     id: 23,
-    questionText: "القاسم المشترك الأكبر GCD(54, 36) يساوي:",
+    questionText: "القاسم المشترك الأكبر [GCD(54, 36)] يساوي:",
     options: ["9", "18", "12", "6"],
     correctIndex: 1,
     explanation:
-        "قواسم 54 هي: 1, 2, 3, 6, 9, 18, 27, 54. وقواسم 36 هي: 1, 2, 3, 4, 6, 9, 12, 18, 36. أكبر قاسم مشترك بينهما هو 18.",
+        "بتحليل العددين أو كتابة قواسمهما نجد أن قواسم [54] هي [1, 2, 3, 6, 9, 18, 27, 54]، وقواسم [36] هي [1, 2, 3, 4, 6, 9, 12, 18, 36]، وأكبر قاسم مشترك هو [18].",
   ),
   Question(
     id: 24,
-    questionText: "المقدار √27 + √12 يساوي:",
+    questionText: "المقدار [√27 + √12] يساوي:",
     options: ["√39", "5√3", "6√3", "لا يجمع"],
     correctIndex: 1,
     explanation:
-        "نبسط الجذور أولاً: √27 = √(9 × 3) = 3√3، وكذلك √12 = √(4 × 3) = 2√3. ثم نجمع: 3√3 + 2√3 = 5√3.",
+        "نبسط كلاً من الجذرين أولاً: [√27 = 3√3] وكذلك [√12 = 2√3]، ثم نجمع الجذرين المتشابهين: [3√3 + 2√3 = 5√3].",
   ),
   Question(
     id: 25,
-    questionText: "قيمة المقدار (√(√5))⁴ هي:",
+    questionText: "قيمة المقدار [(√(√5))⁴] هي:",
     options: ["√5", "25", "5", "125"],
     correctIndex: 2,
     explanation:
-        "الرفع للقوة 4 يعادل التربيع مرتين متتاليتين. التربيع الأول يزيل الجذر الخارجي لنحصل على (√5)²، والتربيع الثاني يزيل الجذر الداخلي ليصبح الناتج 5.",
+        "الرفع للقوة [4] يعادل التربيع مرتين متتاليتين؛ التربيع الأول يزيل الجذر الخارجي ليبقى [(√5)²]، والتربيع الثاني يزيل الجذر الداخلي فيكون الناتج [5].",
   ),
   Question(
     id: 26,
-    questionText: "ربع العدد 8⁵ يساوي:",
+    questionText: "ربع العدد [8⁵] يساوي:",
     options: ["2¹⁵", "2¹³", "2¹²", "4⁵"],
     correctIndex: 1,
     explanation:
-        "نكتب الأعداد بدلالة الأساس 2: العدد 8 = 2³، ومنه 8⁵ = (2³)⁵ = 2¹⁵. والعدد 4 = 2². إذن ربع العدد هو: 2¹⁵ / 2² = 2^(15-2) = 2¹³.",
+        "نكتب الأعداد بدلالة الأساس [2]: لدينا [8 = 2³] ومنه [8⁵ = (2³)⁵ = 2¹⁵]، ولدينا أيضاً [4 = 2²]. إذن ربع العدد يساوي: [2¹⁵ / 2² = 2¹⁵⁻² = 2¹³].",
   ),
   Question(
     id: 27,
-    questionText: "العدد 0.00003 يكتب بالصيغة العلمية:",
+    questionText: "العدد [0.00003] يكتب بالصيغة العلمية:",
     options: ["3 × 10⁵", "3 × 10⁻⁴", "3 × 10⁻⁵", "3 × 10⁻⁶"],
     correctIndex: 2,
     explanation:
-        "لتحويل العدد إلى الصيغة العلمية نحرك الفاصلة العشرية 5 منازل نحو اليمين، لذلك نضرب بالقوة السالبة: 3 × 10⁻⁵.",
+        "لتحويل العدد إلى الصيغة العلمية نحرك الفاصلة العشرية [5] منازل نحو اليمين حتى تصبح بعد الرقم [3]، فنضرب بالقوة السالبة: [3 × 10⁻⁵].",
   ),
   Question(
     id: 28,
-    questionText: "طبيعة العدد π - (π / 2) هي:",
+    questionText: "طبيعة العدد [π - (π / 2)] هي:",
     options: ["عدد صحيح", "عدد غير عادي", "عدد عادي", "صفر"],
     correctIndex: 1,
     explanation:
-        "بتوحيد المقامات نجد أن π - (π / 2) = π / 2. وبما أن π عدد غير عادي، فإن قسمته على 2 تعطي عدداً غير عادي أيضاً.",
+        "بتوحيد المقامات نجد أن [π - (π / 2) = π / 2]، وبما أن [π] عدد غير عادي فإن قسمته على [2] تعطي عدداً غير عادي أيضاً.",
   ),
   Question(
     id: 29,
-    questionText: "إن العدد (√5 - √2)² هو:",
-    options: ["عدد صحيح", "عدد عادي", "عدد غير عادي", "يساوي 3"],
+    questionText: "إن العدد [(√5 - √2)²] هو:",
+    options: ["عدد صحيح", "عدد عادي", "عدد غير عادي", "يساوي [3]"],
     correctIndex: 2,
     explanation:
-        "نفك المتطابقة التربيعية (مربع الأول - ضعفي الأول بالثاني + مربع الثاني): (√5)² - 2(√5)(√2) + (√2)² = 5 - 2√10 + 2 = 7 - 2√10. وبما أن √10 جذر أصم، فالناتج عدد غير عادي.",
+        "نفك المتطابقة التربيعية: [(√5)² - 2(√5)(√2) + (√2)² = 5 - 2√10 + 2 = 7 - 2√10]. وبما أن [√10] جذر أصم، فإن الناتج عدد غير عادي.",
   ),
   Question(
     id: 30,
-    questionText: "ناتج نشر الجداء (x - √3)(x + √3) يساوي:",
+    questionText: "ناتج نشر الجداء [(x - √3)(x + √3)] يساوي:",
     options: ["x² + 3", "x² - 3", "x² - √3", "x² - 9"],
     correctIndex: 1,
     explanation:
-        "تطبيق مباشر لمتطابقة فرق مربعي حدين: (a - b)(a + b) = a² - b². مربع الحد الأول x² ناقص مربع الحد الثاني (√3)² = 3، فيكون الناتج x² - 3.",
+        "حسب متطابقة فرق مربعي حدين [(a - b)(a + b) = a² - b²]، نربع الحد الأول [x²] ونطرح منه مربع الحد الثاني [(√3)² = 3]، فيكون الناتج [x² - 3].",
   ),
 ];
 
@@ -439,7 +461,8 @@ class HomeScreen extends StatelessWidget {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.phone_android, size: 18, color: Colors.blue.shade700),
+                    Icon(Icons.phone_android,
+                        size: 18, color: Colors.blue.shade700),
                     const SizedBox(width: 6),
                     Text(
                       '0995386583',
@@ -753,7 +776,7 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
-        toolbarHeight: 82, // توسيع الارتفاع ليتسع للاسم ورقم الموبايل كاملاً دون اقتطاع
+        toolbarHeight: 82,
         titleSpacing: 8,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -810,7 +833,8 @@ class _QuizScreenState extends State<QuizScreen> {
                 children: [
                   TextButton.icon(
                     onPressed: resetQuiz,
-                    icon: const Icon(Icons.refresh, color: Colors.red, size: 20),
+                    icon:
+                        const Icon(Icons.refresh, color: Colors.red, size: 20),
                     label: const Text(
                       'إعادة الاختبار',
                       style: TextStyle(
@@ -841,7 +865,7 @@ class _QuizScreenState extends State<QuizScreen> {
               ),
             ),
 
-          // شريط التنقل بين الأسئلة
+          // شريط أرقام الأسئلة
           Container(
             height: 64,
             color: Colors.grey.shade50,
@@ -857,7 +881,7 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
 
-          // منطقة عرض السؤال والخيارات
+          // منطقة السؤال والخيارات والتبرير
           Expanded(
             child: ListView(
               controller: _mainScrollController,
@@ -888,25 +912,25 @@ class _QuizScreenState extends State<QuizScreen> {
                   ],
                 ),
                 const SizedBox(height: 20),
-                
-                // نص السؤال مع المعالجة الذكية لاتجاه المعادلات الرياضية
-                MixedDirectionText(
+
+                // نص السؤال
+                MathRichText(
                   question.questionText,
                   style: const TextStyle(
                     fontSize: 21,
                     fontWeight: FontWeight.w600,
-                    height: 1.6,
+                    height: 1.7,
                     color: Colors.black87,
                   ),
                 ),
                 const SizedBox(height: 24),
 
-                // الخيارات
+                // قائمة الخيارات
                 ...List.generate(question.options.length, (index) {
                   return _buildOptionButton(question, index, hasAnswered);
                 }),
 
-                // صندوق التبرير والنتيجة الفورية
+                // صندوق التبرير والنتيجة
                 if (hasAnswered) ...[
                   const SizedBox(height: 20),
                   Container(
@@ -948,12 +972,12 @@ class _QuizScreenState extends State<QuizScreen> {
                               fontWeight: FontWeight.bold,
                               color: Colors.black87),
                         ),
-                        const SizedBox(height: 6),
-                        MixedDirectionText(
+                        const SizedBox(height: 8),
+                        MathRichText(
                           question.explanation,
                           style: const TextStyle(
                             fontSize: 16,
-                            height: 1.6,
+                            height: 1.8,
                             color: Colors.black87,
                           ),
                         ),
@@ -965,7 +989,7 @@ class _QuizScreenState extends State<QuizScreen> {
             ),
           ),
 
-          // أزرار التنقل السفلية (السابق / التالي)
+          // أزرار التنقل السفلية
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -1114,10 +1138,11 @@ class _QuizScreenState extends State<QuizScreen> {
               Expanded(
                 child: Align(
                   alignment: Alignment.centerRight,
-                  child: MixedDirectionText(
+                  child: MathRichText(
                     question.options[index],
+                    highlightMath: false,
                     style: TextStyle(
-                      fontSize: 18,
+                      fontSize: 19,
                       fontWeight: FontWeight.w600,
                       color: textColor,
                     ),
