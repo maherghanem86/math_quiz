@@ -23,7 +23,7 @@ class Question {
 
 /// أداة عرض النصوص المختلطة (عربي + رياضيات) بدقة 100%
 /// أي نص يوضع داخل [...] يتم عرضه ككتلة رياضية مستقلة من اليسار لليمين (LTR)
-/// مع فرض اتجاه الحروف الصارم (LRO) لمنع انقلاب الأسس السالبة أو الجذور أو الأقواس.
+/// مع فرض علامات اتجاه يمينية (RLM) حول النصوص العربية لمنع تبدل أماكن المعادلات المتجاورة.
 class MathRichText extends StatelessWidget {
   final String text;
   final TextStyle style;
@@ -38,16 +38,20 @@ class MathRichText extends StatelessWidget {
     this.highlightMath = true,
   });
 
-  // فرض اتجاه اليسار لليمين (Left-to-Right Override) حرفياً لمنع انقلاب الرموز مثل 3⁻¹
+  // فرض اتجاه اليسار لليمين (Left-to-Right Override) حرفياً لمنع انقلاب الرموز داخل المعادلة
   String _enforceStrictLtr(String input) {
     return '\u202D$input\u202C';
+  }
+
+  // تثبيت اتجاه النص العربي (Right-to-Left Mark) لمنع انقلاب ترتيب المعادلات المتتالية في الجملة الواحدة
+  String _enforceArabicRtlContext(String arabicSegment) {
+    return '\u200F$arabicSegment\u200F';
   }
 
   @override
   Widget build(BuildContext context) {
     // إذا كان النص كله عبارة عن معادلة واحدة (مثل الخيارات) ولا يحتوي على أقواس [...]
     if (!text.contains('[') && !text.contains(']')) {
-      // التحقق مما إذا كان النص يحتوي على رموز رياضية فقط بدون حروف عربية
       final bool hasArabic = RegExp(r'[\u0600-\u06FF]').hasMatch(text);
       if (!hasArabic) {
         return Directionality(
@@ -68,11 +72,12 @@ class MathRichText extends StatelessWidget {
     int lastEnd = 0;
 
     for (final Match match in bracketRegex.allMatches(text)) {
-      // إضافة النص العربي الذي يسبق المعادلة
+      // إضافة النص العربي الذي يسبق المعادلة مع تثبيت اتجاهه اليميني
       if (match.start > lastEnd) {
+        final String arabicPart = text.substring(lastEnd, match.start);
         spans.add(
           TextSpan(
-            text: text.substring(lastEnd, match.start),
+            text: _enforceArabicRtlContext(arabicPart),
             style: style,
           ),
         );
@@ -118,28 +123,32 @@ class MathRichText extends StatelessWidget {
       lastEnd = match.end;
     }
 
-    // إضافة النص العربي المتبقي بعد آخر معادلة
+    // إضافة النص العربي المتبقي بعد آخر معادلة مع تثبيت اتجاهه اليميني
     if (lastEnd < text.length) {
+      final String remainingArabic = text.substring(lastEnd);
       spans.add(
         TextSpan(
-          text: text.substring(lastEnd),
+          text: _enforceArabicRtlContext(remainingArabic),
           style: style,
         ),
       );
     }
 
-    return RichText(
-      textAlign: textAlign,
+    return Directionality(
       textDirection: TextDirection.rtl,
-      text: TextSpan(
-        style: style,
-        children: spans,
+      child: RichText(
+        textAlign: textAlign,
+        textDirection: TextDirection.rtl,
+        text: TextSpan(
+          style: style,
+          children: spans,
+        ),
       ),
     );
   }
 }
 
-// قاعدة بيانات الأسئلة (30 سؤالاً) مع تأطير جميع المعادلات بـ [...] لضمان عدم التداخل نهائياً
+// قاعدة بيانات الأسئلة (30 سؤالاً)
 final List<Question> quizData = [
   Question(
     id: 1,
@@ -316,7 +325,7 @@ final List<Question> quizData = [
     options: ["3³", "6²", "108", "216"],
     correctIndex: 2,
     explanation:
-        "نصف العدد يعني قسمته على [2]، وبما أن [6³ = 6 × 6 × 6 = 216]، فإن نصفه هو [216 ÷ 2 = 108].",
+        "نصف العدد يعني قسمته على [2]، نفكك الأساس إلى جداء عوامل: [6³ = (2 × 3)³ = 2³ × 3³]، ثم نقسم على [2]: [(2³ × 3³) / 2¹ = 2³⁻¹ × 3³ = 2² × 3³ = 4 × 27 = 108].",
   ),
   Question(
     id: 21,
